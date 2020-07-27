@@ -229,6 +229,9 @@ if __name__ == '__main__':
         os.mkdir(save_path)
     record_file = os.path.join(save_path, 'train_record.txt')
 
+    with open(record_file,'w') as f:
+        f.write('rate:{}, alpha_epoch:{}, epoch:{}\n'.format(args.train_val_rate,args.alpha_epoch,args.epochs))
+
     if args.ignoring:
         alphas_criterion = nn.CrossEntropyLoss(reduction='none')
 

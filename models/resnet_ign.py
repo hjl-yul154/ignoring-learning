@@ -163,7 +163,18 @@ class ResNet(nn.Module):
             alphas = alphas[indices] * self.num_train / len(indices)
             loss = losses.dot(alphas)
         else:
-            loss=torch.mean(losses)
+            loss = torch.mean(losses)
+        return loss
+
+    def criterion(self, outputs, label, indices=None):
+        losses = self._criterion(outputs, label)
+        if indices is not None:
+            alphas = self.alphas
+            alphas = F.softmax(alphas)
+            alphas = alphas[indices] * self.num_train / len(indices)
+            loss = losses.dot(alphas)
+        else:
+            loss = torch.mean(losses)
         return loss
 
     def _initialize_alphas(self):
@@ -172,7 +183,6 @@ class ResNet(nn.Module):
 
     def _alphas_parameters(self):
         return self.alphas_parameters
-
 
 
 def resnet18_ign(criterion, num_classes=100, num_train=0):

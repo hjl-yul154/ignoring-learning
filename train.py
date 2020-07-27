@@ -71,7 +71,8 @@ def train(args, epoch, train_queue, valid_queue, net, alphas, criterion, optimiz
 
         optimizer.zero_grad()
         outputs = net(images)
-        loss = criterion(outputs, labels)
+        # loss = criterion(outputs, labels)
+        loss = net.criterion(outputs, labels, indices)
         loss.backward()
         nn.utils.clip_grad_norm(net.parameters(), args.grad_clip)
         optimizer.step()
@@ -87,9 +88,10 @@ def train(args, epoch, train_queue, valid_queue, net, alphas, criterion, optimiz
 
         if batch_index % args.print_freq == 0:
             # curr_time = time.time()
-            print('epoch {}, train {}/{}, loss: {:.3f}, top1: {:.3f}, top5: {:.3f}'.format(epoch, batch_index, len(train_queue),
-                                                                               objs.avg, top1.avg,
-                                                                               top5.avg))
+            print('epoch {}, train {}/{}, loss: {:.3f}, top1: {:.3f}, top5: {:.3f}'.format(epoch, batch_index,
+                                                                                           len(train_queue),
+                                                                                           objs.avg, top1.avg,
+                                                                                           top5.avg))
             # print(curr_time - prev_time)
             # prev_time = curr_time
 
@@ -112,15 +114,19 @@ def train(args, epoch, train_queue, valid_queue, net, alphas, criterion, optimiz
     if record_file is not None:
         with open(record_file, 'a') as f:
             f.write('Train epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}\n'.format(epoch, objs.avg,
+                                                                                     top1.avg,
+                                                                                     top5.avg))
+            f.write('alphas epoch {}, mean {:.7f}, std {:.7f}, max {:.7f}, min {:.7f}\n'.format(epoch,
+                                                                                                torch.mean(net.alphas),
+                                                                                                torch.std(net.alphas),
+                                                                                                torch.max(net.alphas),
+                                                                                                torch.min(net.alphas)))
+    print('Train epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}'.format(epoch, objs.avg,
                                                                          top1.avg,
                                                                          top5.avg))
-            f.write('alphas epoch {}, mean {:.7f}, std {:.7f}, max {:.7f}, min {:.7f}\n'.format(epoch,torch.mean(net.alphas), torch.std(net.alphas),
-                                                                       torch.max(net.alphas), torch.min(net.alphas)))
-    print('Train epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}'.format(epoch, objs.avg,
-                                                             top1.avg,
-                                                             top5.avg))
-    print('alphas: mean {:.7f}, std {:.7f}, max {:.7f}, min {:.7f}'.format(torch.mean(net.alphas), torch.std(net.alphas),
-                                                           torch.max(net.alphas), torch.min(net.alphas)))
+    print(
+        'alphas: mean {:.7f}, std {:.7f}, max {:.7f}, min {:.7f}'.format(torch.mean(net.alphas), torch.std(net.alphas),
+                                                                         torch.max(net.alphas), torch.min(net.alphas)))
     return top1.avg, top5.avg, objs.avg
 
 
@@ -152,22 +158,22 @@ def infer(args, epoch, valid_queue, net, criterion, mode='val', record_file=None
         top5.update(prec5.item(), n)
     if mode == 'val':
         print('Valid: epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}'.format(epoch, objs.avg,
-                                                                  top1.avg,
-                                                                  top5.avg))
+                                                                              top1.avg,
+                                                                              top5.avg))
         if record_file is not None:
             with open(record_file, 'a') as f:
                 f.write('Valid: epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}\n'.format(epoch, objs.avg,
-                                                                              top1.avg,
-                                                                              top5.avg))
+                                                                                          top1.avg,
+                                                                                          top5.avg))
     else:
         print('Test: epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}'.format(epoch, objs.avg,
-                                                                 top1.avg,
-                                                                 top5.avg))
+                                                                             top1.avg,
+                                                                             top5.avg))
         if record_file is not None:
             with open(record_file, 'a') as f:
                 f.write('Test: epoch {}, loss {:.3f}, top1 {:.3f}, top5 {:.3f}\n'.format(epoch, objs.avg,
-                                                                             top1.avg,
-                                                                             top5.avg))
+                                                                                         top1.avg,
+                                                                                         top5.avg))
 
     # print()
 
@@ -191,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size_train', type=int, default=96, help='batch size for dataloader')
     parser.add_argument('--batch_size_val', type=int, default=32, help='batch size for dataloader')
     parser.add_argument('--batch_size_test', type=int, default=64, help='batch size for dataloader')
-    parser.add_argument('--print_freq', type=float, default=10, help='report frequency')
+    parser.add_argument('--print_freq', type=float, default=20, help='report frequency')
     parser.add_argument('--s', type=bool, default=True, help='whether shuffle the dataset')
     parser.add_argument('--warm', type=int, default=1, help='warm up training phase')
     parser.add_argument('--lr', type=float, default=0.025, help='initial learning rate')
@@ -203,9 +209,9 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 
-    parser.add_argument('--alpha_epoch', type=int, default=20)
-    parser.add_argument('--alphas_lr', type=float, default=1e-4)
-    parser.add_argument('--alphas_weight_decay', type=float, default=0)
+    parser.add_argument('--alpha_epoch', type=int, default=0)
+    parser.add_argument('--alphas_lr', type=float, default=1e-3)
+    parser.add_argument('--alphas_weight_decay', type=float, default=1e-4)
 
     parser.add_argument('--save_dir', type=str, default='./result/')
     parser.add_argument('--save_name', type=str, default=None)
@@ -229,8 +235,8 @@ if __name__ == '__main__':
         os.mkdir(save_path)
     record_file = os.path.join(save_path, 'train_record.txt')
 
-    with open(record_file,'w') as f:
-        f.write('rate:{}, alpha_epoch:{}, epoch:{}\n'.format(args.train_val_rate,args.alpha_epoch,args.epochs))
+    with open(record_file, 'w') as f:
+        f.write('rate:{}, alpha_epoch:{}, epoch:{}\n'.format(args.train_val_rate, args.alpha_epoch, args.epochs))
 
     if args.ignoring:
         alphas_criterion = nn.CrossEntropyLoss(reduction='none')
@@ -328,12 +334,13 @@ if __name__ == '__main__':
         lr = scheduler.get_lr()[0]
 
         top1_train, top5_train, loss_train = train(args, epoch, train_queue, valid_queue, net, alphas, criterion,
-                                                   optimizer, lr,record_file)
+                                                   optimizer, lr, record_file)
         scheduler.step()
 
-        top1_valid, top5_valid, _valid = infer(args, epoch, valid_queue, net, criterion,record_file=record_file)
+        top1_valid, top5_valid, _valid = infer(args, epoch, valid_queue, net, criterion, record_file=record_file)
 
-        top1_test, top5_test, loss_test = infer(args, epoch, test_queue, net, criterion, mode='test',record_file=record_file)
+        top1_test, top5_test, loss_test = infer(args, epoch, test_queue, net, criterion, mode='test',
+                                                record_file=record_file)
 
         # # start to save best performance model after learning rate decay to 0.01
         if best_top1 < top1_test:

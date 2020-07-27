@@ -185,13 +185,13 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cifar-10', help='dataset')
     parser.add_argument('--data', type=str, default='./data')
     parser.add_argument('--gpu', type=bool, default=True, help='use gpu or not')
-    parser.add_argument('--w', type=int, default=0, help='number of workers for dataloader')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--workers', type=int, default=2, help='number of workers for dataloader')
+    parser.add_argument('--epochs', type=int, default=600)
     parser.add_argument('--start_epochs', type=int, default=0)
     parser.add_argument('--batch_size_train', type=int, default=96, help='batch size for dataloader')
     parser.add_argument('--batch_size_val', type=int, default=32, help='batch size for dataloader')
     parser.add_argument('--batch_size_test', type=int, default=64, help='batch size for dataloader')
-    parser.add_argument('--print_freq', type=float, default=20, help='report frequency')
+    parser.add_argument('--print_freq', type=float, default=10, help='report frequency')
     parser.add_argument('--s', type=bool, default=True, help='whether shuffle the dataset')
     parser.add_argument('--warm', type=int, default=1, help='warm up training phase')
     parser.add_argument('--lr', type=float, default=0.025, help='initial learning rate')
@@ -251,17 +251,17 @@ if __name__ == '__main__':
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size_train,
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-        pin_memory=True, num_workers=2)
+        pin_memory=True, num_workers=args.workers)
 
     valid_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size_val,
         sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-        pin_memory=True, num_workers=2)
+        pin_memory=True, num_workers=args.workers)
     print(len(train_queue), len(valid_queue))
 
     test_queue = torch.utils.data.DataLoader(
         test_data, batch_size=args.batch_size_test,
-        pin_memory=True, num_workers=2)
+        pin_memory=True, num_workers=args.workers)
 
     # data preprocessing:
     # cifar100_training_loader, num_train = get_training_dataloader(
@@ -308,7 +308,7 @@ if __name__ == '__main__':
     #     print(param.shape)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, args.epochs, eta_min=args.lr_min, last_epoch=args.start_epochs - 1)
+        optimizer, args.epochs, last_epoch=args.start_epochs - 1)
 
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()
@@ -348,6 +348,7 @@ if __name__ == '__main__':
                 'best_pred': True
             }, os.path.join(save_path, 'best_model.pth'))
             best_top1 = top1_test
+            print('save best model at epoch {}'.format(epoch))
             continue
 
         if not epoch % args.save_epoch:
@@ -359,8 +360,10 @@ if __name__ == '__main__':
             torch.save({
                 'epoch': epoch,
                 'state_dict': state_dict,
+                'alpha_state_dict': net.alphas,
                 'optimizer': optimizer.state_dict(),
-                'best_pred': True
+                'alpha_optimizer': alphas.optimizer.state_dict(),
+                'best_pred': False
             }, os.path.join(save_path, 'checkpoint_{}.pth'.format(epoch)))
 
     # writer.close()

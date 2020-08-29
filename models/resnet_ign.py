@@ -13,6 +13,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn import functional as F
 
+epsilon = 1e-10
+
 
 class BasicBlock(nn.Module):
     """Basic Block for resnet 18 and resnet 34
@@ -85,7 +87,7 @@ class BottleNeck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, num_block, criterion, num_classes=100, num_train=0):
+    def __init__(self, block, num_block, criterion, num_classes=100, num_train=0, softmax=True, isalpha=True):
         super().__init__()
 
         self.block = block
@@ -108,6 +110,12 @@ class ResNet(nn.Module):
         self.conv5_x = self._make_layer(block, 512, num_block[3], 2)
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.softmax = softmax
+        if not self.softmax:
+            print('no softmax for alphas')
+        self.isalpha = isalpha
+        if not self.isalpha:
+            print('no alpha acummulated')
 
         self._initialize_alphas()
 
@@ -150,17 +158,23 @@ class ResNet(nn.Module):
 
     def new(self):
         model_new = ResNet(self.block, self.num_block, self._criterion, self.num_classes, self.num_train)
-        for x, y in zip(model_new.alphas_parameters, self.alphas_parameters):
+        for x, y in zip(model_new.alphas_parameters, self._alphas_parameters()):
             x.data.copy_(y.data)
         return model_new
 
     def _loss(self, input, label, indices=None):
         pred = self(input)
         losses = self._criterion(pred, label)
+        # print(torch.max(losses), torch.min(losses))
         if indices is not None:
             alphas = self.alphas
-            alphas = F.softmax(alphas)
-            alphas = alphas[indices] * self.num_train / len(indices)
+            if self.softmax:
+                alphas = F.softmax(alphas)
+                alphas = alphas[indices] * self.num_train / len(indices)
+            else:
+                # alphas = torch.sigmoid(alphas[indices])
+                alphas=alphas[indices]
+                # alphas = alphas[indices] / (torch.sum(torch.abs(alphas[indices])) + epsilon)
             loss = losses.dot(alphas)
         else:
             loss = torch.mean(losses)
@@ -170,26 +184,37 @@ class ResNet(nn.Module):
         losses = self._criterion(outputs, label)
         if indices is not None:
             alphas = self.alphas
-            alphas = F.softmax(alphas)
-            alphas = alphas[indices] * self.num_train / len(indices)
+            if self.softmax:
+                alphas = F.softmax(alphas)
+                alphas = alphas[indices] * self.num_train / len(indices)
+            else:
+                alphas = alphas[indices] / (torch.sum(torch.abs(alphas[indices])) + epsilon)
             loss = losses.dot(alphas)
         else:
             loss = torch.mean(losses)
         return loss
 
     def _initialize_alphas(self):
-        self.alphas = Variable(1e-3 * torch.randn(self.num_train).cuda(), requires_grad=True)
+        if self.softmax:
+            self.alphas = Variable(1e-3 * torch.zeros(self.num_train).cuda(), requires_grad=True)
+        else:
+            self.alphas = Variable(torch.ones(self.num_train).cuda(), requires_grad=True)
         self.alphas_parameters = [self.alphas]
 
     def _alphas_parameters(self):
-        return self.alphas_parameters
+        return [self.alphas]
+
+    def _update_alphas(self, alphas):
+        self.alphas = alphas
+        self.alphas.requires_grad_()
 
 
-def resnet18_ign(criterion, num_classes=100, num_train=0):
+def resnet18_ign(criterion, num_classes=100, num_train=0, softmax=True, isalpha=True):
     """ return a ResNet 18 object
     """
 
-    return ResNet(BasicBlock, [2, 2, 2, 2], criterion, num_classes=num_classes, num_train=num_train)
+    return ResNet(BasicBlock, [2, 2, 2, 2], criterion, num_classes=num_classes, num_train=num_train, softmax=softmax,
+                  isalpha=isalpha)
 
 
 def resnet34(num_classes=100):

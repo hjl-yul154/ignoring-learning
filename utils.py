@@ -31,7 +31,7 @@ def get_network(args, use_gpu=True, num_train=0):
         if args.net == 'resnet18':
             from models.resnet_ign import resnet18_ign
             criterion = nn.CrossEntropyLoss(reduction='none')
-            net = resnet18_ign(criterion, num_classes=num_classes, num_train=num_train)
+            net = resnet18_ign(criterion, num_classes=num_classes, num_train=num_train,softmax=args.softmax,isalpha=args.isalpha)
 
     else:
         if args.net == 'vgg16':
@@ -271,6 +271,25 @@ class Cutout(object):
 def _data_transforms_cifar10(args):
     CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
     CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+
+    train_transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    ])
+    if args.cutout:
+        train_transform.transforms.append(Cutout(args.cutout_length))
+
+    valid_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+    ])
+    return train_transform, valid_transform
+
+def _data_transforms_cifar100(args):
+    CIFAR_MEAN = [0.5070751592371323, 0.48654887331495095, 0.4409178433670343]
+    CIFAR_STD = [0.2673342858792401, 0.2564384629170883, 0.27615047132568404]
 
     train_transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),

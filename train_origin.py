@@ -29,7 +29,7 @@ from tensorboardX import SummaryWriter
 
 from conf import settings
 from utils import get_network, get_training_dataloader, get_test_dataloader, WarmUpLR, _data_transforms_cifar10, \
-    accuracy, AvgrageMeter, copy_state_dict, copy_optimizer_state_dict
+    _data_transforms_cifar100, accuracy, AvgrageMeter, copy_state_dict, copy_optimizer_state_dict
 from models.ign_alphas import ign_alphas
 
 
@@ -183,11 +183,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--net', type=str, default='resnet18', help='net type')
-    parser.add_argument('--dataset', type=str, default='cifar-10', help='dataset')
+    parser.add_argument('--dataset', type=str, default='cifar-100', help='dataset')
     parser.add_argument('--data', type=str, default='./data')
     parser.add_argument('--gpu', type=bool, default=True, help='use gpu or not')
     parser.add_argument('--workers', type=int, default=2, help='number of workers for dataloader')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--start_epochs', type=int, default=0)
     parser.add_argument('--batch_size_train', type=int, default=96, help='batch size for dataloader')
     parser.add_argument('--batch_size_val', type=int, default=32, help='batch size for dataloader')
@@ -195,10 +195,11 @@ if __name__ == '__main__':
     parser.add_argument('--print_freq', type=float, default=10, help='report frequency')
     parser.add_argument('--s', type=bool, default=True, help='whether shuffle the dataset')
     parser.add_argument('--warm', type=int, default=1, help='warm up training phase')
-    parser.add_argument('--lr', type=float, default=0.025, help='initial learning rate')
-    parser.add_argument('--lr_min', type=float, default=0.001, help='initial learning rate')
+    parser.add_argument('--lr', type=float, default=0.01, help='initial learning rate')
+    parser.add_argument('--lr_min', type=float, default=0.0001, help='initial learning rate')
     parser.add_argument('--ignoring', type=bool, default=False, help='whether use ignoring learning')
     parser.add_argument('--train_val_rate', type=float, default=0.75)
+    parser.add_argument('--bad_rate', type=float, default=None)
     parser.add_argument('--weight_decay', type=float, default=3e-4)
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--seed', type=int, default=1)
@@ -209,7 +210,7 @@ if __name__ == '__main__':
     parser.add_argument('--alphas_weight_decay', type=float, default=0)
 
     parser.add_argument('--save_dir', type=str, default='./result/')
-    parser.add_argument('--save_name', type=str, default=None)
+    parser.add_argument('--save_name', type=str, default='origin75')
     parser.add_argument('--save_epoch', type=int, default=20)
     parser.add_argument('--resume', type=str, default=None)
 
@@ -238,9 +239,22 @@ if __name__ == '__main__':
 
     # dataset
     np.random.seed(args.seed)
-    train_transform, valid_transform = _data_transforms_cifar10(args)
-    train_data = CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
-    test_data = CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
+    if args.dataset == 'cifar-10':
+        train_transform, valid_transform = _data_transforms_cifar10(args)
+        if args.bad_rate is not None:
+            train_data = CIFAR10_bad(root=args.data, train=True, download=True, transform=train_transform,
+                                     bad_rate=args.bad_rate)
+        else:
+            train_data = CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
+        test_data = CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
+    else:
+        train_transform, valid_transform = _data_transforms_cifar100(args)
+        if args.bad_rate is not None:
+            train_data = CIFAR100_bad(root=args.data, train=True, download=True, transform=train_transform,
+                                      bad_rate=args.bad_rate)
+        else:
+            train_data = CIFAR100(root=args.data, train=True, download=True, transform=train_transform)
+        test_data = CIFAR100(root=args.data, train=False, download=True, transform=valid_transform)
 
     num_train = len(train_data)
     indices = list(range(num_train))
@@ -308,8 +322,9 @@ if __name__ == '__main__':
     #     # print(param)
     #     print(param.shape)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, args.epochs, last_epoch=args.start_epochs - 1)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, args.epochs, last_epoch=args.start_epochs - 1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[75, 125, 175], gamma=0.1)
 
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.cuda()

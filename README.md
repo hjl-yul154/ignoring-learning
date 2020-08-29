@@ -21,7 +21,7 @@ I will use cifar100 and cifar dataset from torchvision. It can be automatically 
 
 ### 3. train the model
 ```
-train.py # to train the ignoring-model
-train_origin.py to train the original model
+python train.py # train the ignoring-model
+python train_origin.py # train the original model
 ```
 
